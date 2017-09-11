@@ -167,16 +167,22 @@ contract InvestorsInfo {
  */
 contract InvestyPresale is Ownable, Authorizable, InvestorsInfo {
     using SafeMath for uint;
-
+    // Presale Investy Coin definition START
     event TokensCreated(address indexed to, uint value);
     event PresaleFinished();
     event PresaleStarted(address _token);
 
-    string public name = "Investy Pay Token";
-    string public symbol = "INV";
+    string public name = "Investy Coin";
+    string public symbol = "IVC";
     uint public totalSupply = 0;
     mapping(address => uint) balances;
     address[] investors;
+
+    struct index {
+    uint val;
+    bool isValue;
+    }
+    mapping(address => index) investorsIndex;
 
     bool public presaleActive = true;
     modifier isPresaleActive() {
@@ -185,22 +191,21 @@ contract InvestyPresale is Ownable, Authorizable, InvestorsInfo {
     }
 
     /**
-            constructor
-        */
-    function InvestyPresale() {
-        PresaleStarted(this);
-    }
-
-    /**
        * @dev Allows authorized acces to create tokens. This is used for Bitcoin and ERC20 deposits
        * @param recipient the recipient to receive tokens.
        * @param tokens number of tokens to be created.
        */
-    function createTokens(address recipient, uint tokens) public onlyAuthorized isPresaleActive returns (bool) {
+    function mint(address recipient, uint tokens) internal isPresaleActive returns (bool) {
         totalSupply = totalSupply.add(tokens);
         balances[recipient] = balances[recipient].add(tokens);
-        investors.length++;
-        investors[investors.length - 1] = recipient;
+
+        if(!investorsIndex[recipient].isValue) {
+            investorsIndex[recipient].isValue=true;
+            investorsIndex[recipient].val=investors.length;
+            investors.length++;
+            investors[investors.length - 1] = recipient;
+        }
+
         TokensCreated(recipient, tokens);
         return true;
     }
@@ -216,14 +221,6 @@ contract InvestyPresale is Ownable, Authorizable, InvestorsInfo {
     }
 
     /**
-     * @dev Function to get all authorized all registered investors.
-     * @return address[].
-     */
-    function getInvestors() public onlyAuthorized returns (address[]) {
-        return investors;
-    }
-
-    /**
     * @dev Gets the balance of the specified address.
     * @param _owner The address to query the the balance of.
     * @return An uint representing the amount owned by the passed address.
@@ -231,40 +228,62 @@ contract InvestyPresale is Ownable, Authorizable, InvestorsInfo {
     function balanceOf(address _owner) constant returns (uint balance) {
         return balances[_owner];
     }
+    // Presale Investy Coin definition END
 
-    //} // InvestyToken END
+    event TokenSold(address recipient, uint ether_amount, uint pay_amount, uint exchangerate);
 
+    uint constant MILLI_USD_TO_IVC_RATE = 34;//presale fixed IVC coin cost
+    uint einsteinToUsdRate = 283950;
 
-    //    event TokenSold(address recipient, uint ether_amount, uint pay_amount, uint exchangerate);
-    //    ExchangeRate public exchangeRate;
+    /**
+            constructor
+        */
+    function InvestyPresale() {
+        PresaleStarted(this);
+    }
+
+    /**
+     * @dev Function to get all authorized all registered investors.
+     * @return address[].
+     */
+    function getInvestors() constant onlyAuthorized returns (address[]) {
+        return investors;
+    }
+
     /**
      * @dev Allows anyone to create tokens by depositing ether.
      * @param recipient the recipient to receive tokens.
      */
-    //    function createTokens(address recipient) public saleIsOn payable {
-    //        uint rate = exchangeRate.getRate("ETH");
-    //        uint tokens = rate.mul(msg.value).div(1 ether);
-    //        token.mint(recipient, tokens);
-    //        require(multisigVault.send(msg.value));
-    //        TokenSold(recipient, msg.value, tokens, rate);
-    //    }
+    function createTokens(address recipient) public isPresaleActive payable {
+        uint ivc = (einsteinToUsdRate.mul(msg.value).div(MILLI_USD_TO_IVC_RATE));// 18 signs after comma
+        mint(recipient, ivc);
+        TokenSold(recipient, msg.value, ivc, einsteinToUsdRate / 1000);
+    }
 
+    /**
+       * @dev Allows authorized acces to create tokens. This is used for Bitcoin and ERC20 deposits
+       * @param recipient the recipient to receive tokens.
+       * @param tokens number of tokens*10^-18 to be created.
+       */
+    function createTokens(address recipient, uint tokens) public onlyAuthorized returns (bool){
+        bool result = mint(recipient, tokens);
 
+        return result;
+    }
 
     /**
      * @dev Allows the owner to set the exchangerate contract.
-     * @param _exchangeRate the exchangerate address
+     * @param _einsteinToUsdRate the exchangerate address
      */
-    //    function setExchangeRate(address _exchangeRate) public onlyOwner {
-    //        exchangeRate = ExchangeRate(_exchangeRate);
-    //    }
+    function setExchangeRate(uint _einsteinToUsdRate) public onlyAuthorized {
+        einsteinToUsdRate = _einsteinToUsdRate;
+    }
 
     /**
      * @dev Fallback function which receives ether and created the appropriate number of tokens for the
      * msg.sender.
      */
-    //    function() external payable {
-    //        createTokens(msg.sender);
-    //    }
-
+    function() external payable {
+        createTokens(msg.sender);
+    }
 }
